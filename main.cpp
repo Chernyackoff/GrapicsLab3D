@@ -9,6 +9,7 @@
 #include <QGraphicsLineItem>
 
 
+const double projectionAngle = 30 * std::numbers::pi / 180;
 const int delta_move = 10;
 const double rotation_angle = 15 * std::numbers::pi / 180;
 const std::array<QVector3D, 6> default_points = {QVector3D(40, 30, 50),
@@ -130,7 +131,15 @@ private:
         }
     };
 
-    void projection_volume() {};
+    void projection_volume() {
+        for(int i = 0; i < 6; i++){
+            double xp, yp;
+            xp = points3D[i].x() + points3D[i].z()*cos(projectionAngle); // Jean Cavalier projection
+            yp = points3D[i].y() + points3D[i].z()*sin(projectionAngle);
+            points2D[i].setX(xp);
+            points2D[i].setY(yp);
+        }
+    };
 
     void update_lines(){
         for (int i = 0; i < 3; i++) {
