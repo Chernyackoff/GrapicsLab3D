@@ -169,7 +169,8 @@ public:
         auto label = new QLabel("Controls:\n1. Movement: WASDVB\n"
                                 "2. Rotation Z: QE\n3. Rotation Y: RF\n"
                                 "4. Rotation X: TG\n"
-                                "5. Scale: ZC\n",
+                                "5. Scale: ZC\n"
+                                "6. Change projection: Space",
                                 central);
 
         vLayout->addWidget(label);
