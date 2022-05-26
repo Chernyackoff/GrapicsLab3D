@@ -7,6 +7,7 @@
 #include <QVector3D>
 #include <QKeyEvent>
 #include <QGraphicsLineItem>
+#include <vector>
 
 
 const double projectionAngle = 30 * std::numbers::pi / 180;
@@ -31,11 +32,11 @@ public:
         }
 
         project();
-        //lines init
-        for (int i = 0; i < 3; i++) {
-            lines[i] = scene->addLine({points2D[i], points2D[(i + 1) % 3]});
-            lines[i + 3] = scene->addLine({points2D[i], points2D[i + 3]});
-            lines[i + 6] = scene->addLine({points2D[i + 3], points2D[3 + (i + 1) % 3]});
+
+        for (int i = 0; i < 5; i++) {
+            bool vis = isVisible(faces[i]);
+            if (vis) {
+                draw(faces[i]); }
         }
 
         center.setX(sumX / 6);
@@ -109,17 +110,24 @@ public:
         isFlat = !isFlat;
         update();
     }
-    double getCenterZPos(){
+
+    double getCenterZPos() {
         return center.z();
     }
 
 private:
     bool isFlat;
+    std::array<std::vector<int>, 5> faces = {std::vector<int>{0, 2, 1},
+                                             {0, 3, 5, 2},
+                                             {3, 4, 5},
+                                             {0, 1, 4, 3},
+                                             {2, 5, 4, 1}};
     QGraphicsScene *scene;
     QVector3D center;
     std::array<QVector3D, 6> points3D;
     std::array<QPointF, 6> points2D;
-    std::array<QGraphicsLineItem *, 9> lines;
+    std::vector<QGraphicsLineItem *> lines;
+    std::vector<QGraphicsLineItem *> paintLines;
 
     void project() {
         isFlat ? projection_flat() : projection_volume();
@@ -132,26 +140,102 @@ private:
     };
 
     void projection_volume() {
-        for(int i = 0; i < 6; i++){
+        for (int i = 0; i < 6; i++) {
             double xp, yp;
-            xp = points3D[i].x() + points3D[i].z()*cos(projectionAngle); // Jean Cavalier projection
-            yp = points3D[i].y() + points3D[i].z()*sin(projectionAngle);
+            xp = points3D[i].x() + points3D[i].z() * cos(projectionAngle); // Jean Cavalier projection
+            yp = points3D[i].y() + points3D[i].z() * sin(projectionAngle);
             points2D[i].setX(xp);
             points2D[i].setY(yp);
         }
     };
 
-    void update_lines(){
-        for (int i = 0; i < 3; i++) {
-            lines[i]->setLine({points2D[i], points2D[(i + 1) % 3]});
-            lines[i + 3]->setLine({points2D[i], points2D[i + 3]});
-            lines[i + 6]->setLine({points2D[i + 3], points2D[3 + (i + 1) % 3]});
+    void draw(std::vector<int> points) {
+        QPen pen;
+        pen.setColor(Qt::green);
+        pen.setStyle(Qt::SolidLine);
+        if (points.size() == 4){
+            fill(points2D[points[0]], points2D[points[1]], points2D[points[2]], pen);
+            fill(points2D[points[0]], points2D[points[2]], points2D[points[3]], pen);
+        }
+        else fill(points2D[points[0]], points2D[points[1]], points2D[points[2]], pen);
+        for (int i = 0; i < points.size(); i++) {
+            lines.push_back(scene->addLine({points2D[points[i]],
+                                            points2D[points[(i + 1) % points.size()]]}));
         }
     };
 
-    void update(){
+    void fill(QPointF p1, QPointF p2, QPointF p3, QPen pen) {
+        // sort in ascending order from p1 to p3
+        if (p1.y() > p2.y()) std::swap(p1, p2);
+        if (p2.y() > p3.y()) std::swap(p2, p3);
+        if (p2.y() < p1.y()) std::swap(p2, p1);
+
+        // ratios of line equation i.e (x - x1)/(x2 - x1) = (y - y1)/(y2 - y1)
+        // kX = x2 - x1
+        // ky = y2 - y1
+        int kX1, kX2, kY1, kY2;
+        int x0 = p1.x(), y0 = p1.y();
+
+        bool switched = false;
+
+        kX1 = p2.x() - p1.x();
+        kY1 = p2.y() - p1.y();
+        kX2 = p3.x() - p1.x();
+        kY2 = p3.y() - p1.y();
+
+        // intersection points
+        qreal x1, x2;
+        for (int y = p1.y() + 1; y < p3.y(); y += 1) {
+            if (y > int(p2.y()) || kY1 == 0) {
+                switched = true;
+                kX1 = p3.x() - p2.x();
+                kY1 = p3.y() - p2.y();
+                x0 = p2.x();
+                y0 = p2.y();
+            }
+
+            x1 = double((y - y0) * kX1) / kY1 + x0;
+            x2 = double((y - p1.y()) * kX2) / kY2 + p1.x();
+
+            if (kX1 == 0) x1 = switched ? p2.x() : p1.x();
+            if (kX2 == 0) x2 = p1.x();
+
+            paintLines.push_back(scene->addLine(
+                    {QPointF(x1, y), QPointF(x2, y)}, pen));
+        }
+    }
+
+    bool isVisible(std::vector<int> points) {
+        double sum =0 ;
+        int j;
+        for (int i = 0; i < points.size(); i++) {
+            if (i == points.size() - 1) j = 0;
+            else j = i + 1;
+            sum += (points2D[points[i]].x() - points2D[points[j]].x()) *
+                   (points2D[points[i]].y() + points2D[points[j]].y());
+        }
+        return sum > 0;
+    };
+
+    void update_visibility() {
+        for (int i = 0; i < 5; i++) {
+            if (isVisible(faces[i])) draw(faces[i]);
+        }
+    };
+
+    void update() {
         project();
-        update_lines();
+        for(auto & line : lines){
+            scene->removeItem(line);
+            delete line;
+        }
+        lines.clear();
+        for(auto & line: paintLines){
+            scene->removeItem(line);
+            delete line;
+        }
+        paintLines.clear();
+        update_visibility();
     };
 
 };
@@ -240,17 +324,17 @@ public:
                 prism->changeProjection();
                 break;
         }
-  }
+    }
 
 private:
-    QLabel* labelZ;
+    QLabel *labelZ;
     QGraphicsScene scene;
     QGraphicsView view;
     Prism *prism;
 
-    void updateLabel(){
-       auto s = QString("Center Z: %1").arg(prism->getCenterZPos());
-       labelZ->setText(s);
+    void updateLabel() {
+        auto s = QString("Center Z: %1").arg(prism->getCenterZPos());
+        labelZ->setText(s);
     }
 };
 
